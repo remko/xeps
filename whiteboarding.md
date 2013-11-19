@@ -90,7 +90,7 @@ the blank canvas. At this point, from Romeo's point of view, Romeo is in state
 Since the goal of shared whiteboarding
 is to make sure that both parties are working on the same drawing, Romeo sends
 all the necessary information of the circle he just drew to Juliet, so she can
-also draw it on her side. Once she acknolwedges she received and processed this
+also draw it on her side. Once she acknowledges she received and processed this
 information, Romeo knows Juliet is in state *s<sub>1</sub>* as well.
 
             s_0
@@ -122,7 +122,7 @@ operations, the state space from Romeo's point of view looks like this:
     (Romeo) 
 
 Romeo still thinks Juliet is in *s<sub>1</sub>*, so he sends information about his
-operation *b* to Juliet. However, shotly thereafter, he receives a message from
+operation *b* to Juliet. However, shortly thereafter, he receives a message from
 Juliet of her square-drawing operation *c* she did while in state *s<sub>1</sub>*, 
 so the state space now looks like this:
 
@@ -143,7 +143,7 @@ Romeo realizes that Juliet has a drawing with her square on top of the circle, w
 he has a drawing with his square on top of it. If Romeo applies Juliet's operation *c*
 directly on his current drawing, and Juliet would simply draw operation *b* on hers 
 (once she receives the information), the drawings would be inconsistent: indeed, the order of
-the squares would be different. Therefore, instead applying operation *c* directly,
+the figures would be different. Therefore, instead applying operation *c* directly,
 Romeo needs to apply a modified version *c'*, while Juliet needs to apply a modified
 version *b′*, in order to converge to a common state *s<sub>4</sub>* again:
 
@@ -171,8 +171,8 @@ operation to apply in order to converge, so no communication is necessary to dec
 how to resolve the conflict. We assume both sides know, for each possible combination of different 
 operations starting from the same state, how these operations need to be transformed
 in order to get a pair of operations that gets both sides back to the same state again.
-We will refer to this transformation as the *xform* function, which is applied on 2 states,
-and results in 2 transformed states.
+We will refer to this transformation as the *xform* function, which is applied on 2 operations
+starting from the same state, and results in 2 transformed operations.
 
 So, if we go back to the example, Romeo decides to apply operation *c'*.
 
@@ -215,7 +215,7 @@ who in turn can conclude that the drawings have new converged:
             s_4
        (Romeo, Juliet)
 
-Given the state transformation function above, it's clear that
+Given the *xform* state transformation function above, it's clear that
 Romeo and Juliet can easily resolve any situation where the states diverged by one
 operation on each side. However, in practice, situations can diverge more than this, so
 more computation needs to be done.
@@ -267,24 +267,10 @@ is notified of this:
 
 Since this operation *c* is rooted on top of a different state *s<sub>0</sub>* than 
 Romeo's current state, it needs to be transformed so it can be applied on top of *s<sub>2</sub>*.
-Since we can only apply the *xform* function on 2 operations rooted from the same state,
-we can compute the states *a′* and *c′*:
-
-                s_0
-     .   .   .   o   .   .
-                / \ 
-             a /   \ c
-          s_1 /     \ s_3
-     .   .   o   .   o   .
-            / \     /
-         b /   \c′ /a′ 
-          /     \ /
-     .   o   .   o   .   .
-        s_2
-
-Using this result, we can apply the same *xform* function on *b* and *c′*, in order to get
-to our desired operation *c′′* rooted on top of the current state. We can discard the intermediate
-results, which brings Romeo in the following state:
+Since the *xform* function can only be applied on 2 operations rooted from the same state,
+this transformation has to be done in multiple steps. First, *xform* is applied 
+on *a* and *c*, yielding *a′* and *c′*; then, *xform* can be applied on *b* and *c′*, in
+order to get the desired operation *c′′* rooted on top of Romeo's current state:
 
                 s_0
      .   .   .   o   .   .
@@ -292,170 +278,45 @@ results, which brings Romeo in the following state:
              a /   \ c
           s_1 /     \ s_3 (Juliet)
      .   .   o   .   o   .
-            /        
-         b /            
-          /        
-     .   o   .   .   .   .
-     s_2  \
-        c′′\
-            \
-     .   .   o   .   .   .
-            s_4
-
-Before any confirmation on the still pending operation *a* comes in from Juliet, Romeo decides
-to apply another operation *d* on his whiteboard:
-
-                s_0
-     .   .   .   o   .   .
-                / \ 
-             a /   \ c
-          s_1 /     \ s_3 (Juliet)
-     .   .   o   .   o   .
-            /        
-         b /            
-          /        
-     .   o   .   .   .   .
-     s_2  \
-        c′′\
-            \
-     .   .   o   .   .   .
-            / s_4
-         d /
-          /
-     .   o   .   .   .   .
-        s_5 (Romeo)
-
-At this point, Romeo receives notification about another operation *e* applied by Juliet:
-
-                s_0
-     .   .   .   o   .   .
-                / \ 
-             a /   \ c
-          s_1 /     \ s_3         
-     .   .   o   .   o   .
-            /         \
-         b /           \ e
-          /             \
-     .   o   .   .   .   o s_6 (Juliet)
-     s_2  \
-        c′ \
-            \
-     .   .   o   .   .   .
-            / s_4
-         d /
-          /
-     .   o   .   .   .   .
-        s_5 (Romeo)
-
-Again, Romeo can transform *e* such that it can be applied on top of his current
-state *s<sub>5</sub>*, by repeatedly applying *xform* on the current and intermediate
-operations, resulting in the following state:
-
-                s_0
-     .   .   .   o   .   .
-                / \ 
-             a /   \ c
-          s_1 /     \ s_3         
-     .   .   o   .   o   .
-            /         \
-         b /           \ e
-          /             \
-     .   o   .   .   .   o s_6 (Juliet)
-     s_2  \
-        c′ \
-            \
-     .   .   o   .   .   .
-            / s_4
-         d /
-          /
-     .   o   .   .   .   .
-      s_5 \
-        e′ \
-            \
-     .   .   o   .   .   .
-            s_7 (Romeo)
-
-At this point, Juliet has received Romeo's initial operation *a*, applied a transformed
-version *a′*, and sends this information to Romeo:
-
-                s_0
-     .   .   .   o   .   .
-                / \ 
-             a /   \ c
-          s_1 /     \ s_3         
-     .   .   o   .   o   .
-            /         \
-         b /           \ e
-          /             \
-     .   o   .   .   .   o s_6
-     s_2  \             /
-        c′ \           / a′
-            \         /
-     .   .   o   .   o   .
-            / s_4     s_8 (Juliet)
-         d /
-          /
-     .   o   .   .   .   .
-      s_5 \
-        e′ \
-            \
-     .   .   o   .   .   .
-            s_7 (Romeo)
-
-At this point, Romeo can now apply *xform* a few times again to transform operation *b*,
-such that it is rooted on top of *s<sub>8</sub>*, and send off the result to Juliet for 
-processing.
-
-By combining invocations of the *xform* functions, Romeo can now keep on processing
-Juliet's operations and sending off his own, and make his state converge with Juliet's 
-eventually.
-
-
-#### The Bridge
-
-In the previous example, we have repeatedly called *xform* on actual and intermediate
-operations in the state space. Although this is correct, doing this in practice results
-in repeated recomputation of the same intermediate states. A way to avoid this is to
-constantly maintain a *bridge* of operations that goes from the current state of the
-server to the current state of the client. 
-
-Let's revisit the previous example, where Romeo starts off with 2 local operations.
-
-                s_0 (Juliet)
-     .   .   .   o   .   .
-                //
-             a // 
-          s_1 //      
-     .   .   o   .   .   .
-            //    
-         b //      
-          //       
-     .   o   .   .   .   .
-        s_2 (Romeo)
-
-At this point, the bridge runs from *s<sub>0</sub>* to *s<sub>2</sub>*, and is simply 
-a combination of all the operations that haven't been processed by Juliet yet. Upon
-receiving operation *c* from Juliet, each operation of the bridge is transformed by
-exactly the same repeated invocations of *xform* as before, resulting in a new bridge 
-from *s<sub>3</sub>* to *s<sub>4</sub>*, consisting of *a′* and *b′*:
-
-                s_0
-     .   .   .   o   .   .
-                / \ 
-             a /   \ c
-          s_1 /     \ s_3 (Juliet)
-     .   .   o   .   o   .
-            /       //
-         b /       // a′
-          /       //
+            / \     //
+         b /   \c′ //a′ 
+          /     \ //
      .   o   .   o   .   .
      s_2  \     //
-        c′ \   // b′ 
+        c′′\   //b′
             \ //
      .   .   o   .   .   .
             s_4 (Romeo)
 
-When Romeo applies operation *d* locally, the bridge is extended by this operation:
+For the future, Romeo remembers the intermediate results *a′* and *b′*; this is exactly the 
+combination of operations that would bring Juliet's current state into Romeo's current state.
+We refer to this combination as the *bridge* (marked in double lines above).
+
+Before any confirmation on the still pending operation *a* comes in from Juliet, Romeo 
+now decides to apply another operation *d* on his whiteboard:
+
+                s_0
+     .   .   .   o   .   .
+                / \ 
+             a /   \ c
+          s_1 /     \ s_3 (Juliet)
+     .   .   o   .   o   .
+            /        
+         b /            
+          /        
+     .   o   .   .   .   .
+     s_2  \
+        c′′\
+            \
+     .   .   o   .   .   .
+            / s_4
+         d /
+          /
+     .   o   .   .   .   .
+        s_5 (Romeo)
+
+Romeo also adds *d* to the *bridge*, memorizing how to get from Juliet's current state to
+Romeo's current state:
 
                 s_0
      .   .   .   o   .   .
@@ -472,14 +333,13 @@ When Romeo applies operation *d* locally, the bridge is extended by this operati
             \ //
      .   .   o   .   .   .
             // s_4
-         d // c′
+         d // 
           //
      .   o   .   .   .   .
         s_5 (Romeo)
 
-Upon receiving operation *e* from Juliet, we can again simply repeatedly apply *xform* on the 
-base of the bridge, taking us one step down on each invocation, building a new bridge ending
-in the final state:
+
+At this point, Romeo receives notification about another operation *e* applied by Juliet:
 
                 s_0
      .   .   .   o   .   .
@@ -491,23 +351,78 @@ in the final state:
          b /           \ e
           /             \
      .   o   .   .   .   o s_6 (Juliet)
-     s_2  \             //
-        c′ \           // a′′ 
-            \         //
+     s_2  \
+        c′′\
+            \
+     .   .   o   .   .   .
+            / s_4
+         d /
+          /
+     .   o   .   .   .   .
+        s_5 (Romeo)
+
+
+Again, Romeo needs to transform *e* such that it can be applied on top of his current
+state *s<sub>5</sub>*. If we look at the bridge Romeo is keeping, we can see that we
+can get to the desired transformed operation *e′′′* by repeatedly applying *xform* on 
+all operations along the bridge:
+
+                   
+     .   .   .   o   .   .
+                / \ 
+               /   \ c
+              /     \ s_3
      .   .   o   .   o   .
-            / s_4   //
-         d /       // b′′
-          /       //
+            /       //\
+           /    a′ //  \ e
+          /       //    \
+     .   o   .   o   .   o s_6 (Juliet)
+          \   b′//\     /
+           \   //  \   / a′′
+            \ //  e′\ /
+     .   .   o   .   o   .
+            //\     /
+          d//  \   / b′′
+          // e′′\ /
      .   o   .   o   .   .
-      s_5 \     //
-        e′ \   // d′′
-            \ //
+          \     /
+       e′′′\   /d′
+            \ /
+     .   .   o   .   o   .
+            s_7 (Romeo)
+
+Romeo records the intermediate results *a′′*, *b′′*, and *d′* as the new bridge running from 
+Juliet's current state to Romeo's current state.
+
+At this point, Juliet has received Romeo's initial operation *a*, applied a transformed
+version *a′*, and sends this information to Romeo:
+
+                s_0
+     .   .   .   o   .   .
+                / \ 
+             a /   \ c
+          s_1 /     \ s_3         
+     .   .   o   .   o   .
+            /         \
+         b /           \ e
+          /             \
+     .   o   .   .   .   o s_6
+     s_2  \             /
+        c′ \           / a′′
+            \         /
+     .   .   o   .   o   .
+            / s_4     s_8 (Juliet)
+         d /
+          /
+     .   o   .   .   .   .
+      s_5 \
+        e′ \
+            \
      .   .   o   .   .   .
             s_7 (Romeo)
 
-
-Finally, when Romeo receives confirmation that *a′* has been applied, he can remove *a′* from
-the bridge, and submit the already computed b′ off to Juliet.
+This means Romeo can now remove the first element from his bridge, as it is no longer
+required to get from Juliet's current state to his:
 
                 s_0
      .   .   .   o   .   .
@@ -533,6 +448,15 @@ the bridge, and submit the already computed b′ off to Juliet.
      .   .   o   .   .   .
             s_7 (Romeo)
 
+Since he received confirmation that his operation has been applied, Romeo can now send his
+next operation for processing: the version of *b*, transformed such that it is rooted in 
+Juliet's history. This is exactly the first element of the bridge, *b′′*.
+
+By maintaining the bridge, and transforming Juliet's operations against it using
+repeated invocations of *xform*, Romeo can now keep on processing
+Juliet's operations and sending off his own, and make his state converge with Juliet's 
+eventually.
+
 
 #### The Server
 
@@ -541,7 +465,7 @@ has the restriction to only send operations rooted in the server's history, it n
 the entire state space and constantly transform its unprocessed operations before sending the
 next one off for processing. 
 
-The server side is, however, much simpler. Since all incoming operations are guaranteed to
+The server side, however, is much simpler. Since all incoming operations are guaranteed to
 be rooted on top of the history, all the server needs to do is maintain is its own history, and
 transform any incoming operations against this linear history. This means the server side
 can scale with multiple participants in a shared session.
@@ -565,59 +489,82 @@ The rest of this document formalizes these concepts, and also specifies the comm
 protocol for a shared session.
 
 
-### Entities
+### Algorithm
 
-TODO: Client vs Server
+Given the operation transformation function 
 
-### Transformation Function
+> xform(a,b) = (a′, b′) such that b′ ○ a ≡ a′ ○ b
 
-Given a transformation function 
+The client algorithm:
 
-> xform(a,b) = (a′, b′) 
+    bridge = []
+    operation_in_process = false
+    current_server_state = "initial"
 
-such that 
+    on_user_operation_applied(op) :
+      bridge.push_back(op)
+      if not operation_in_process :
+        send_next_operation()
 
-> b′ ○ a ≡ a′ ○ b
+    on_server_operation_received(op) :
+      current_server_state = op.target_state
+      if op.creator == self :
+        new_bridge.pop_front()
+        send_next_operation()
+      else :
+        new_bridge = []
+        op_b = op
+        for op_a in bridge :
+          op_a', op_b' = xform(op_a, op_b)
+          new_bridge.push_back(op_a')
+          op_b = op_b'
+        apply_operation(op_b)
+        bridge = new_bridge
 
-This function, given 2 operations *a* and *b*, computes the operations *b′* and *a′*, such that,
-when applied after applying *a* and *b* respectively, result in the same state. Or, when
-representing this schematically in the state space:
-
-        .   o   .
-           / \  
-        a /   \ b
-         /     \
-        o   .   o    
-         \     /    
-        b′\   / a′ 
-           \ /
-        .   o   . 
-
-### Client algorithm
-
-In this section, we explain the details of the conflict resolution algorithm underlying
-Operational Transformation.
-
-Based on the *xform* function, we define an algorithm that decides which operations to apply
-in order to make 2 parties converge to the same state when they have diverged.
+    send_next_operation() :
+      if bridge.empty() :
+        operation_in_process = false
+      else :
+        op = bridge.front()
+        op.source_state = current_server_state 
+        op.creator = self
+        send_to_server(op)
+        operation_in_process = true
 
 
-### Server algorithm
+The server algorithm:
+
+    current_state = "initial"
+    history = []
+
+    on_operation_received(op) :
+      while op.source_state != current_state :
+        _, op = xform(history[op.source_state], op)
+      current_state = new_id()
+      op.target_state = current_state
+      history.append(state)
+      send_to_clients(op)
+
 
 ### Whiteboarding
 
 In this section, we describe the concrete operations and transformation functions,
 used for applying Operational Transformation on shared whiteboarding sessions.
 
+**TODO**
+
 #### Whiteboarding Operations
 
 In this section, we define the operations that can be used in a whiteboarding session.
+
+**TODO**
 
 #### Whiteboarding Operation Transformation Function
 
 In this section, we define the transformation function *xform* on all combinations of
 the whiteboard operations.
 
+**TODO**
 
 ## Use Cases
 
@@ -650,7 +597,7 @@ the whiteboard operations.
       <session-terminate xmlns="http://swift.im/shedit" sid="session1"/>
     </iq>
     
-TODO: Add extra metadata in requests/rejects: reason, continuation, ...
+**TODO: Add extra metadata in requests/rejects: reason, continuation, ...**
 
 ### Session Termination
 
@@ -662,6 +609,13 @@ TODO: Add extra metadata in requests/rejects: reason, continuation, ...
       <session-terminate xmlns="http://swift.im/shedit"/>
     </iq>
   
+
+### Sending operations
+
+**TODO**
+
+
+
 <!--
 ### 1st situation
     
