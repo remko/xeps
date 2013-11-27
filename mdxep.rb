@@ -156,6 +156,10 @@ module Kramdown
 				"<li>#{convert_children(el)}</li>"
 			end
 
+			def convert_codespan(el)
+				"<tt>#{el.value}</tt>"
+			end
+
 			def convert_codeblock(el)
 				value = CGI.escape_html(el.value)
 				if @in_example
@@ -211,7 +215,13 @@ module Kramdown
 
 			def convert_a(el)
 				text = convert_children(el)
-				"<link url='#{el.attr['href']}'>#{text}</link> <note><link url='#{el.attr['href']}'>#{text}</link></note>"
+				if text == "IANA"
+					"&IANA;"
+				elsif text == "XMPP Registrar"
+					"&REGISTRAR;"
+				else
+					"<link url='#{el.attr['href']}'>#{text}</link> <note><link url='#{el.attr['href']}'>#{text}</link></note>"
+				end
 			end
 
 			def convert_html_element(el)

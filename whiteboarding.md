@@ -29,12 +29,66 @@ framework for shared editing. Applications include shared whiteboarding,
 shared text editing, and other collaborative activities.
 
 
+## NOTES
+
+- The XEP first gives an elaborate explanation of how the reasoning behind OT, how the algorithm 
+  works, then presents a/the algorithm, and then talks about the protocol.
+  In principle, the XEP could also start with the pure protocol, whiteboard operations,
+  and transformation specification for the operations, and just specify that incoming
+  operations need to be transformed by combining the xform function correctly, and leave
+  a concrete algorithm out of the discussion.
+  An explanation of a/the algorithm for doing the transformations could come afterwards too.
+
+- The XEP only talks about whiteboarding. The Operational Transformation approach can be used
+  for any 'shared editing' application, though (for example, shared text editing). I have
+  tried to keep the generic OT and the whiteboard-specific part separated in the discussion 
+  and the protocol, so this could be split up into several XEPS (e.g. a general 'Shared Editing'
+  XEP, a 'Shared Whiteboard Editing' XEP, and a 'Shared Text Editing XEP). 
+  If we decide there is no interest in keeping this open, some protocol elements can probably
+  be simplified and collapsed together into the 'urn:xmpp:wb' namespace.
+
+- We only describe a one-to-one shared whiteboarding session. In order to support multi-user
+  editing, nothing would have to change in the current algorithms and protocols. However,
+  multi-users raises several questions, and would require some extras in the protocol:
+  how do users join a common whiteboard; do we use a decentralized or centralized (e.g. 
+  with a dedicated component) approach, or both; if decentralized, what happens when
+  the entity playing the server role goes away (how is the shared whiteboard handed over,
+  who takes over the new role); ...
+  
+- The whiteboarding operations we use are simple: you can only add, remove, or update 1 
+  element at a time in a single operation. The advantage is that the transformation function
+  is easy. The disadvantages are:
+
+    - An operation has less expressive power (you can't describe every possible whiteboard 
+      manipulation in a single operation)
+    - You cannot compose operations into a single operation. Since the client can only
+      have one operation in flight, it potentially needs to buffer lots of operations.
+      If these can be composed, the complete buffer can be sent for processing in one go,
+      whereas now they need to be sent operation by operation, which means a round-trip
+      and processing time for each operation, which in turn means a higher chance that
+      the states of the local versions of the whiteboard will diverge, and that operations
+      need to be resolved.
+  
+    Other OT systems (such as Google Wave) define their operations in a more powerful way, 
+    such that they are composable. Doing this makes the transformation function a lot 
+    more complex though.
+
+- There currently isn't any support for resuming whiteboard sessions after an entity drops
+  off. This should just involve the server sending the whiteboard on the initial session-accept.
+
+- consistency checking (to see whether the whiteboard is still up to date)
+
+- The server's "operation" has different required attributes than the client's (the client
+  does not have a `target-state` attribute, and the server does not need a `source-state`
+  attribute). Should this be enforced in the schema? How? Using different namespaces?
+
+
 ## Introduction
 
 There have been several attempts in the past to create a protocol extension for shared 
 editing (more specifically shared whiteboarding), which have been rejected in the
 past for several reasons. Here, we present a protocol which uses a simple yet powerful
-format, and is based on the sound and proven *Operational Transformation* technology,
+format, and is based on the sound and proven *Operational Transformation* (OT) technology,
 widely used in collaborative applications. Its main
 advantages are that changes done locally are immediate, without the need for explicit
 synchronization for every operation, yet keeping all the documents consistent across
@@ -57,7 +111,7 @@ The protocol defined herein was designed to address the following requirements:
 ## Operational Transformation
 
 In this section, we illustrate the concepts and algorithms of *Operational Transformation*, 
-the technology on which the shared whiteboarding protocol is based. We explain Operational
+(OT) the technology on which the shared whiteboarding protocol is based. We explain Operational
 Transformation without going into any details on communication protocols.
 
 ### Example
@@ -570,197 +624,196 @@ the whiteboard operations.
 
 ### Session Initialization
     
-*Example: Entity requests a new shared text editing session*
+When an entity wants to start a whiteboarding session with another entity, it sends
+a request to the other party.
+
+*Example: Initiator requests a new shared text editing session*
 
     <iq from="romeo@montague.net/garden"
         to="juliet@capulet.com/balcony"
-        type="set">
-      <session-request xmlns="http://swift.im/shedit" sid="session1">
-        <text xmlns="http://swift.im/shared-text"/>
+        type="set" id="request-1">
+      <session-request xmlns="urn:xmpp:wb" sid="session1">
+        <wb xmlns="urn:xmpp:wb"/>
       </session-request>
     </iq>
 
+**TODO: Add extra metadata to request**
 
-*Example: Session accepts request*
+The other party immediately acknowledges receipt of the request.
 
-    <iq to="juliet@capulet.com/balcony"
-        from="romeo@montague.net/garden"
-        type="set">
-      <session-accept xmlns="http://swift.im/shedit" sid="session1"/>
+*Example: Responder acknowledges receipt of the request*
+
+    <iq from="juliet@capulet.com/balcony"
+        to="romeo@montague.net/garden"
+        type="result" id="request-1">
     </iq>
 
-*Example: Session rejects request*
+When the other party agrees to do a whiteboard session, it sends a session
+acceptance element, and the initiator immediately acknowledges receipt.
+
+*Example: Responder accepts request*
+
+    <iq from="juliet@capulet.com/balcony"
+        to="romeo@montague.net/garden"
+        type="set" id="accept-1">
+      <session-accept xmlns="urn:xmpp:wb" sid="session1"/>
+    </iq>
+
+*Example: Initiator acknowledges receipt of the acceptance*
+
+    <iq from="romeo@montague.net/garden"
+        to="juliet@capulet.com/balcony"
+        type="result" id="accept-1">
+      <session-request xmlns="urn:xmpp:wb" sid="session1">
+        <wb xmlns="urn:xmpp:wb"/>
+      </session-request>
+    </iq>
+
+After this exchange, the whiteboard session has started, and parties can start sending
+each other operations.
+
+Alternatively, if the responding entity does not want to start a whiteboarding session, it 
+rejects the request.
+
+*Example: Responder rejects request*
 
     <iq to="juliet@capulet.com/balcony"
         from="romeo@montague.net/garden"
-        type="set">
-      <session-terminate xmlns="http://swift.im/shedit" sid="session1"/>
+        type="set" id="accept-1">
+      <session-terminate xmlns="urn:xmpp:wb" sid="session1"/>
     </iq>
     
+
 **TODO: Add extra metadata in requests/rejects: reason, continuation, ...**
 
 ### Session Termination
+
+During a whiteboarding session, either entity can terminate the session by sending a
+terminate request.
 
 *Example: Session is terminated by an entity*
 
     <iq to="juliet@capulet.com/balcony"
         from="romeo@montague.net/garden"
         type="set">
-      <session-terminate xmlns="http://swift.im/shedit"/>
+      <session-terminate xmlns="urn:xmpp:wb" sid="session1"/>
     </iq>
   
 
-### Sending operations
+### Exchanging operations
 
-**TODO**
+During a whiteboarding session, entities send each other operations that have been applied to
+their local whiteboard. These operations need to applied locally, possibly after first being
+transformed using the *operational transformation* algorithms described in ????.
+The initiator of the session follows the *client* algorithm for transforming operations,
+whereas the responder follows the *server* algorithm.
+
+
+#### Server sends operations to Client
+
+The server always keeps the state of the whiteboard locally. Whenever the server
+applies an operation on the whiteboard (either an operation received from the client, or
+an operation from someone controlling the server), it sends out a notification to the
+connected client. The applied operation and its data are wrapped in an `operation` element.
+Additionally, the `operation` element has a `creator` attribute containing the full JID
+of the originator of the operation (i.e. either the server or the client), and a
+`target-state` attribute containing an identifier that the server uses to identify the
+new state of the whiteboard.
+
+*Example: Server sends operation to client*
+
+    <iq from="juliet@capulet.com/balcony"
+        to="romeo@montague.net/garden"
+        type="set" id="operation-2">
+      <operation xmlns="urn:xmpp:wb" sid="session1" target-state="state-5"
+                 creator="juliet@capulet.com/balcony">
+        <add xmlns="urn:xmpp:wb">
+          <line x1="0" y1="0" x2="200" y2="200" id="line-1"/>
+        </add>
+      </operation>
+    </iq>
+
+When the client receives the operation, it immediately acknowledges receipt of the operation.
+
+*Example: Client acknolwedges receipt of operation*
+
+    <iq from="romeo@montague.net/garden"
+        to="juliet@capulet.com/balcony"
+        type="result" id="operation-2">
+    </iq>
+
+If the client receives an operation that was not originated from itself (i.e.
+it has a different `creator` JID), the client needs to apply the incoming
+operation to its own local version of the whiteboard.  If the client has any
+operations applied on its whiteboard that have not yet been processed by the
+server (i.e. that have not yet been sent back as an `operation` from the server), it 
+needs to first transform the received operation such that
+it is applicable to the current state of the whiteboard. This is done using
+(possibly multiple applications of) the *xform* function, as described in the
+client algorithm from ???.
+
+
+#### Client sends operations to Server
+
+Similarly to the server, the client also keeps the state of the whiteboard locally.
+When the entity controlling the client has applied an operation on the whiteboard, it 
+sends this operation to the server. This is done by wrapping the exact operation and its data
+in an `operation` element, with a `source-state` attribute to indicate the 
+server state on which this operation is rooted. This attribute MUST correspond to the 
+last received `target-state` value of an operation received from the server. If no operation 
+has been received from the server yet, the `source-state` attribute MUST be omitted.
+
+*Example: Client sends operation to server*
+
+    <iq from="romeo@montague.net/garden"
+        to="juliet@capulet.com/balcony"
+        type="set" id="operation-4">
+      <operation xmlns="urn:xmpp:wb" sid="session1" source-state="state-2">
+        <insert xmlns="urn:xmpp:wb">
+          <line x1="100" y1="100" x2="300" y2="300" id="line-25"/>
+        </insert>
+      </operation>
+    </iq>
+
+The server immediately acknowledges receipt of the operation.
+
+*Example: Server acknowledges receipt of the operation*
+
+    <iq from="juliet@capulet.com/balcony"
+        to="romeo@montague.net/garden"
+        type="result" id="operation-4">
+    </iq>
+
+When a client has sent an operation, it MUST wait for a notification of the corresponding 
+operation applied on the server side before sending any other locally applied operations.
+
+When the server receives an operation, it applies it to its local whiteboard. If the
+`source-state` of the operation is not the most current state, the server first needs to 
+transform the operation using the OT algorithm described in ???, such that it is rooted 
+in the most current state. After it has applied this operation, it sends a corresponding operation
+back, with the `target-state` attribute set to a new identifier for a state, and
+the `creator` set to the full JID of the originator of the operation. Since the `source-state`
+is implictly known (it is the same as the `target-state` of the last operation), it can be
+omitted.
+
+*Example: Server sends corresponding operation*
+
+    <iq from="juliet@capulet.com/balcony"
+        to="romeo@montague.net/garden"
+        type="set" id="operation-23">
+      <operation xmlns="urn:xmpp:wb" sid="session1" target-state="state-5"
+                 creator="romeo@montague.net/garden">
+        <add xmlns="urn:xmpp:wb">
+          <line x1="200" y1="200" x2="300" y2="300" id="line-25"/>
+        </add>
+      </operation>
+    </iq>
+
+From the `creator` attribute, the client knows when its operation has been applied.
 
 
 
 <!--
-### 1st situation
-    
-In case when client and server exchanges operations in large intervals and they
-know about each applied operation, operations doesn't have to be transformed
-and are just applied and added to the history. Here is example of such
-situation:
-
-  *Example: Client sends a line*
-
-    <iq from="romeo@montague.net/garden"
-        to="juliet@capulet.com/balcony"
-        type="set">
-      <wb xmlns="http://swift.im/whiteboard" type="data">
-        <operation type="insert" pos="1" id="a" parentid="0">
-          <line id="ab" x1="10" y1="10" x2="20" y2="30" 
-              stroke="#000000" stroke-width="1" opacity="1" />
-        </operation>
-      </wb>
-    </iq>
-
-Server should apply it and send it back to inform client about it.
-
-  *Example: Server confirms the operation*
-
-    <iq from="juliet@montague.net/balcony"
-        to="romeo@capulet.com/garden"
-        type="set">
-      <wb xmlns="http://swift.im/whiteboard" type="data">
-        <operation type="insert" pos="1" id="a" parentid="0">
-          <line id="ab" x1="10" y1="10" x2="20" y2="30" 
-              stroke="#000000" stroke-width="1" opacity="1" />
-        </operation>
-      </wb>
-    </iq>
-
-  *Example: Server sends a rectangle*
-
-    <iq from="romeo@montague.net/garden"
-        to="juliet@capulet.com/balcony"
-        type="set">
-      <wb xmlns="http://swift.im/whiteboard" type="data">
-        <operation type="insert" pos="2" id="b" parentid="a">
-          <rect id="ab" x="10" y="10" width="20" height="30"
-              stroke="#000000" fill="#334422" stroke-width="1" opacity="1" fill-opacity="0.75" />
-        </operation>
-      </wb>
-    </iq>
-
-Because it's parented off "a" client should apply it(client doesn't send back acks).
-Data exchange looks like that: (C is client, S is server)
-
-- C -> S: insert(1, a, 0, line) (insert line at first position with ID="a" and parented off operation "0". It doesn't matter how elements, in this example line, looks like.)<br />
-- S -> C: insert(1, a, 0, line) <br />
-- S -> C: insert(2, b, a, rect) <br />
-
-After this exchange client and server contains [line, rect] elements(in this order).
-    
-  
-### 2nd situation
-    
-Let's try more complicated situation. Here the client performed own operation when in the meantime server performed own. Let's assume that client side is line (there was operation insert(1, a, 0 line)) and server side is rect (insert(1, b, 0, rect)).
-
-When operation "a" is performed on the client side, it is sent out to the server C -> S: insert(1, a, 0, line), but server doesn't receive that immediately and performs own operation "b" without knowing of "a" and send it out S -> C: insert(1, b, 0, rect). After a while client receives operation from the server and founds that it isn't parented off "a"(which was last operation in history), so it has to be transformed against all operations applied after "0"(in this case it's only "a"). Transform(a, b) (It's transform(Client operation, server operation)) returns 2 operations b′(insert(2, b, a, rect)) and a′(insert(1, a, b, line)) as on picture below:
-
-  <img src='diamond.png' /><br />
-
-Client want to apply "b" so it uses "b′" instead(because it's parented off last operation in history). After applying it it contains [line, rect].
-
-When server receives "a" operation from client it proceeds almost identical, but instead of using "b′" result from transformation it uses "a′" and send it immediately to the clients(server sends out every applied operation) S -> C: insert(1, a, b, line). After applying "a′" server side is [line, rect] which is the same as client side.
-
-    
-  
-### 3rd situation
-    
-Situation here is very similar to previous one, the difference is that client
-performed 2 operations instead of 1. So let's assume that client performes
-operation insert(1, a, 0, line)(client side is [line]) and sends it to the
-server. Before receiving anything from the server it performed one more
-operation insert(2, b, a, rect)(so it's [line, rect]), but it doesn't send that
-because client didn't receive ack for "a" operation. So the client performed 2
-operations, but server still doesn't know about them and it performs own
-operation insert(1, c, 0, ellipse)(so server side is [ellipse]) and of course
-sends it to the client. Let's move to the client side. It now receives "c"
-operation from the server, but it can't be applied because there were two
-operations performed after "0"(which is parent of "c"). So transformation
-function has to be used two times. First transformation is transform(a, c) we
-are interested in "c'" result which is insert(2, c, a, ellipse), because its
-parent isn't "b" which is last operation in history we need to transform it one
-more time. Next transformation is transform(b, c'), left operation "c''" which
-is insert(3, c, b, ellipse) can be applied on client side. After that client
-side is [line, rect, ellipse]. Right operation "b′" which is insert(2, b, a,
-rect)(the parent is "a′" not "a", but it doesn't matter because server don't
-have normal "a") needs to be stored somewhere because this could be next
-operation to send to server(but client still doesn't have any ack from server
-about applying "a", so it couldn't be sent). Server now receives "a" operation
-which has to be transformed. This transformation is identical to first
-transformation on the client side, but server applies and send back "a′" result
-from it which is insert(1, a, c, line). After that server is [line, ellipse].
-When client receives this transformed operation as ack it could finally send
-"b", but it has to be parented somewhere in server history, so operation to
-send is "b′" from last client side transformation. Server can apply and send
-back this operation without transformation because its parent is last operation
-in history. After this operation server side is [line, rect, ellipse] which is
-the same as client side.
-    
-  
-### 4th situation
-    
-Let's get into even more complicated situation.
-
-<img src='situation.png' /> <br />
-
-The client applied operations "a" and "b" when server applied operation "c". In this situation operation "a" should be sent immediately and correctly transformed operation "b" should be sent after receiving operation "a" from the server. In my implementation I implemented this algorithm(in client) as following:
-
-- if client doesn't wait for any ack from the server it should send own operation to it and add this operation to "bridge"(in this example it's "a")
-- if client waits for ack it only adds local operation to "bridge"(in this example it's "b")
-- on received operation from server which isn't ack("c" in this example) client should do the transformation of first element of "bridge" and received element(a and c). Left result should be stored as a temporary value(t1) and right result should replace old operation in bridge(in this situation "a" operation from bridge should be replaced by right result of transformation, which is "a′" here). You should do this with every occurence in bridge, but in next steps, temp operation should be used as server operation. After iterating over whole bridge last temp value should be applied on the client side.(in this situation next transformation is "b" and "t1" and result is "c'" and "t2", "c'" should be applied) 
-- on received operation from server which is ack("a′" in this example) client should remove this element from bridge and send next element from bridge("t2" in this example, it is known that "a′" is the last server operation so "t2" is parented off somewhere in server history)
-- when both sides have the same amount of operations it means that they are both synchronized
-
-In this example somebody applied operation "d" after applying "a′" on server
-side. In the next steps client will receive "d" from the server, recompute
-"bridge"(which has only one element now) apply "d'" operation locally and then
-receive "b′" ack which is transformed version of "t2".
-    
-    
-Server side is much simpler than client side, because the assumption that it
-must receive only operations parented off somewhere in it's operations history.
-So when it receives any operation it checks if it is parented off last
-operation if it is it should be applied and sent back and if it isn't it should
-be transformed step by step to receive final operation which should be applied
-and sent back. In this example server firsts sent out own operation "c" and
-then receives operation "a" which has the same parent as "c" so it should be
-transformed against "c" and result should be applied and sent back(to every
-client). Next operation in example is "d" which is own operation so it should
-be added to history and sent back, after that server receives "t2" which is
-transformed "b", but it needs to be transformed one more time to receive
-operation which could be appended to the history(of course "b′" should be sent
-back to clients). 
-    
-  
-### Transformations
-    
-Here is described transformation function for every combination of input operations
     
 #### insert, insert
 
@@ -787,7 +840,6 @@ For transformation(update(pos1, newpos1, a, 0, element1), update(pos2, newpos2, 
     if "pos2 >= pos1" and "newpos2 >= newpos1" then second result is update(pos1, newpos1-1, b, a, element1); 
     if none of above second result is just update(pos1, newpos1, a, b, element2); 
     
-
 ## Glossary
   
 - **Operation ID**: ID assigned to operation, unique within the session.
@@ -810,10 +862,10 @@ For transformation(update(pos1, newpos1, a, 0, element1), update(pos2, newpos2, 
   operations have such property that, after applying these operations client
   and server views are the same.
 - **Bridge**: Client side buffer for own operations which haven't been sent to the server.
-    
 
 -->
 
+<!--
 ## Implementation Notes
  
 OPTIONAL
@@ -826,21 +878,132 @@ OPTIONAL.
 
 OPTIONAL.
 
-## Security Considerations
+-->
 
-REQUIRED.
+## Security Considerations
 
 ## IANA Considerations
 
-REQUIRED.
+This document requires no interaction with [IANA][]
 
 ## XMPP Registrar Considerations
 
-REQUIRED.
+The [XMPP Registrar][] includes `urn:xmpp:wb' in its registry of protocol namespaces (see 
+<http://xmpp.org/registrar/namespaces.html>).
 
 ## XML Schema
 
-REQUIRED for protocol specifications.
+    <?xml version='1.0' encoding='UTF-8'?>
+
+    <xs:schema
+        xmlns:xs='http://www.w3.org/2001/XMLSchema'
+        targetNamespace='urn:xmpp:wb'
+        xmlns='urn:xmpp:wb'
+        elementFormDefault='qualified'>
+
+      <xs:annotation>
+        <xs:documentation>
+          The protocol documented by this schema is defined in
+          XEP-???: http://www.xmpp.org/extensions/xep-???.html
+        </xs:documentation>
+      </xs:annotation>
+
+      <xs:element name='session-request'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:element ref='wb'/>
+          </xs:choice>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='session-accept'>
+        <xs:complexType>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='session-terminate'>
+        <xs:complexType>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='operation'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:element ref='add'/>
+            <xs:element ref='remove'/>
+            <xs:element ref='update'/>
+          </xs:choice>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+          <xs:attribute name='source-state' type='xs:string' use='optional'/>
+          <xs:attribute name='target-state' type='xs:string' use='optional'/>
+          <xs:attribute name='creator' type='xs:string' use='optional'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='wb'>
+        TODO
+      </xs:element>
+
+      <xs:element name='add'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:element ref='line'/>
+            <xs:element ref='path'/>
+            <xs:element ref='rect'/>
+            <xs:element ref='polygon'/>
+            <xs:element ref='text'/>
+            <xs:element ref='ellipse'/>
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='remove'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:element ref='line'/>
+            <xs:element ref='path'/>
+            <xs:element ref='rect'/>
+            <xs:element ref='polygon'/>
+            <xs:element ref='text'/>
+            <xs:element ref='ellipse'/>
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='update'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:element ref='line'/>
+            <xs:element ref='path'/>
+            <xs:element ref='rect'/>
+            <xs:element ref='polygon'/>
+            <xs:element ref='text'/>
+            <xs:element ref='ellipse'/>
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='line'>
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base='empty'>
+              <xs:attribute name='id' type='xs:string' use='required'/>
+              TODO
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:simpleType name='empty'>
+        <xs:restriction base='xs:string'>
+          <xs:enumeration value=''/>
+        </xs:restriction>
+      </xs:simpleType>
+
+    </xs:schema>
 
 ## Acknolwedgements
 
@@ -849,4 +1012,5 @@ The introductory example from this specification is based on
 
 
 [ot-intro]: http://www.codecommit.com/blog/java/understanding-and-applying-operational-transformation]
-
+[IANA]: ...
+[XMPP Registrar]: ...

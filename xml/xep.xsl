@@ -1036,9 +1036,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='sub'>
-    <span class='sub'>
-      <xsl:apply-templates/>
-    </span>
+    <sub><xsl:apply-templates/></sub>
   </xsl:template>
 
   <xsl:template match='pre'>
