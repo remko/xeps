@@ -145,7 +145,12 @@ module Kramdown
 			end
 
 			def convert_p(el)
-				"<p>" + convert_children(el) + "</p>"
+				c = convert_children(el)
+				if c.nil? or c.empty?
+					""
+				else
+					"<p>" + c + "</p>"
+				end
 			end
 
 			def convert_ul(el)
@@ -161,13 +166,14 @@ module Kramdown
 			end
 
 			def convert_codeblock(el)
-				value = CGI.escape_html(el.value)
+				# value = CGI.escape_html(el.value)
+				value = el.value
 				if @in_example
-					result = "<example caption='#{@in_example}'>#{value}</example>"
+					result = "<example caption='#{@in_example}'><![CDATA[#{value}]]></example>"
 					@in_example = nil
 					result
 				else
-					"<code>#{value}</code>"
+					"<code><![CDATA[#{value}]]></code>"
 				end
 			end
 			
@@ -219,8 +225,11 @@ module Kramdown
 					"&IANA;"
 				elsif text == "XMPP Registrar"
 					"&REGISTRAR;"
+				elsif el.attr['href'].start_with? '#'
+					"<link url='#{el.attr['href']}'>#{text}</link>"
 				else
-					"<link url='#{el.attr['href']}'>#{text}</link> <note><link url='#{el.attr['href']}'>#{text}</link></note>"
+					title = el.attr['title'] || text
+					"<link url='#{el.attr['href']}'>#{text}</link> <note><link url='#{el.attr['href']}'>#{title}</link></note>"
 				end
 			end
 

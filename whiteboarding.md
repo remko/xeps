@@ -31,19 +31,19 @@ shared text editing, and other collaborative activities.
 
 ## NOTES
 
-- The XEP first gives an elaborate explanation of how the reasoning behind OT, how the algorithm 
-  works, then presents a/the algorithm, and then talks about the protocol.
+- The XEP first gives an elaborate explanation of how the reasoning behind OT, how the 
+  control algorithm works, then presents a/the control algorithm, and then talks about the protocol.
   In principle, the XEP could also start with the pure protocol, whiteboard operations,
   and transformation specification for the operations, and just specify that incoming
   operations need to be transformed by combining the xform function correctly, and leave
-  a concrete algorithm out of the discussion.
-  An explanation of a/the algorithm for doing the transformations could come afterwards too.
+  a concrete control algorithm out of the discussion.
+  An explanation of a/the control algorithm for doing the transformations could come afterwards too.
 
 - The XEP only talks about whiteboarding. The Operational Transformation approach can be used
   for any 'shared editing' application, though (for example, shared text editing). I have
   tried to keep the generic OT and the whiteboard-specific part separated in the discussion 
-  and the protocol, so this could be split up into several XEPS (e.g. a general 'Shared Editing'
-  XEP, a 'Shared Whiteboard Editing' XEP, and a 'Shared Text Editing XEP). 
+  and the protocol, so this could be split up into several XEPs (e.g. a general 'Shared Editing'
+  XEP, a 'Shared Whiteboard Editing' XEP, and a 'Shared Text Editing' XEP). 
   If we decide there is no interest in keeping this open, some protocol elements can probably
   be simplified and collapsed together into the 'urn:xmpp:wb' namespace.
 
@@ -57,7 +57,7 @@ shared text editing, and other collaborative activities.
   
 - The whiteboarding operations we use are simple: you can only add, remove, or update 1 
   element at a time in a single operation. The advantage is that the transformation function
-  is easy. The disadvantages are:
+  is easy, and that conflicts are easy to resolve. The disadvantages are:
 
     - An operation has less expressive power (you can't describe every possible whiteboard 
       manipulation in a single operation)
@@ -71,17 +71,23 @@ shared text editing, and other collaborative activities.
   
     Other OT systems (such as Google Wave) define their operations in a more powerful way, 
     such that they are composable. Doing this makes the transformation function a lot 
-    more complex though.
+    more complex though, and could cause conflict resolution to lose more information.
 
 - There currently isn't any support for resuming whiteboard sessions after an entity drops
   off. This should just involve the server sending the whiteboard on the initial session-accept.
 
-- consistency checking (to see whether the whiteboard is still up to date)
+- There currently isn't any support for consistency checking (to see whether the whiteboard is still
+  consistent with the server), using some sort of fingerprints.
 
-- The server's "operation" has different required attributes than the client's (the client
+- The server's `operation` attribute has different required attributes than the client's (the client
   does not have a `target-state` attribute, and the server does not need a `source-state`
   attribute). Should this be enforced in the schema? How? Using different namespaces?
 
+<!-- 
+  For Pielas
+  - I'm not using the 'id' in the delete operations. I noticed the algorithm using the 'pos',
+    but the UI uses the 'id'. Is it ok to remove the 'id', and assume everything is done positionally?
+-->
 
 ## Introduction
 
@@ -110,7 +116,7 @@ The protocol defined herein was designed to address the following requirements:
 
 ## Operational Transformation
 
-In this section, we illustrate the concepts and algorithms of *Operational Transformation*, 
+In this section, we illustrate the concepts and control algorithms of *Operational Transformation*, 
 (OT) the technology on which the shared whiteboarding protocol is based. We explain Operational
 Transformation without going into any details on communication protocols.
 
@@ -280,7 +286,7 @@ Before moving on to the complex case, let's make the roles of Romeo and Juliet m
 specific. In a shared session, we are going to designate one party to be the *client*, and 
 the other the *server*. In a one-to-one session such as the one from our example, either party 
 can play the client or server role, it just needs to be agreed up front (e.g. the initiator 
-of the session). We make this distinction so we can have different focus for the algorithms
+of the session). We make this distinction so we can have different focus for the control algorithms
 on the client and the server side, allowing the server algorithm to scale
 to multi-user scenarios (not handled in this specification). Concretely, in our example,
 let's assume Romeo is the client, and Juliet is the server.
@@ -534,7 +540,7 @@ it consists of the following parts:
 - A transformation function *xform*, which, for any combination of operations rooted from
   the same state, computes which operations need to be applied in order to converge to an
   equivalent state again
-- A client and a server algorithm that maintains the state space, and decides which operations
+- A client and a server control algorithm that maintains the state space, and decides which operations
   to transform and to send out for processing. The client algorithm needs to do the heavy lifting
   and an extensive state space, whereas the server algorithm is simple and only needs to maintain a
   very limited history for its transformations.
@@ -543,13 +549,13 @@ The rest of this document formalizes these concepts, and also specifies the comm
 protocol for a shared session.
 
 
-### Algorithm
+### Control Algorithm
 
 Given the operation transformation function 
 
 > xform(a,b) = (a′, b′) such that b′ ○ a ≡ a′ ○ b
 
-The client algorithm:
+The client control algorithm:
 
     bridge = []
     operation_in_process = false
@@ -586,7 +592,7 @@ The client algorithm:
         operation_in_process = true
 
 
-The server algorithm:
+The server control algorithm:
 
     current_state = "initial"
     history = []
@@ -596,7 +602,7 @@ The server algorithm:
         _, op = xform(history[op.source_state], op)
       current_state = new_id()
       op.target_state = current_state
-      history.append(state)
+      history[op.source_state] = op
       send_to_clients(op)
 
 
@@ -605,39 +611,227 @@ The server algorithm:
 In this section, we describe the concrete operations and transformation functions,
 used for applying Operational Transformation on shared whiteboarding sessions.
 
-**TODO**
-
 #### Whiteboarding Operations
 
-In this section, we define the operations that can be used in a whiteboarding session.
+The following 3 operations are supported for changing a whiteboarding document:
 
-**TODO**
+- `add`: adds an element at a specific location in the document
+- `remove`: removes an element from the document
+- `update`: updates an element in the document to change its attributes or its position
+
+The `add` and `update` operations take as child payload one of the drawing primitives 
+described in [Primitives](#primitives).
+
+#### Insert
+
+The `add` operation has an OPTIONAL `position` attribute to specify where in the document the 
+operation is added. If the `operation` attribute is omitted, the element is added at the
+end of the document.
+
+For example, suppose the whiteboard document is:
+
+    <rect x="10" y="10" width="100" y2="100"/>
+    <line x1="0" y1="0" x2="200" y2="200"/>
+
+Applying the following operation:
+
+    <insert xmlns="urn:xmpp:wb" position="1">
+      <ellipsis cx="20" cy="20" rx="30" ry="30"/>
+    </insert>
+
+results in the following document:
+
+    <rect x="10" y="10" width="100" y2="100"/>
+    <ellipsis cx="20" cy="20" rx="30" ry="30"/>
+    <line x1="0" y1="0" x2="200" y2="200"/>
+
+#### Remove
+
+The `remove` operation has a `pos` attribute specifying the offset in the
+document of the element to remove.
+
+For example, suppose the whiteboard document is:
+
+    <rect x="10" y="10" width="100" y2="100"/>
+    <line x1="0" y1="0" x2="200" y2="200"/>
+
+Applying the following operation:
+
+    <remove xmlns="urn:xmpp:wb" pos="1"/>
+
+results in the following document:
+
+    <rect x="10" y="10" width="100" y2="100"/>
+
+
+#### Update
+
+The `update` operation contains a `position` attribute to specify the index of
+the child element in the document to update, and an OPTIONAL `new-position` 
+to specify the new position of the child element. The original element at
+position `position` is replaced by the child element of the `update` operation.
+
+For example, suppose the whiteboard document is:
+
+    <rect x="10" y="10" width="100" y2="100"/>
+    <ellipsis cx="20" cy="20" rx="30" ry="30"/>
+    <line x1="0" y1="0" x2="200" y2="200"/>
+
+Applying the following operation:
+
+    <update xmlns="urn:xmpp:wb" position="1" new-position="2">
+      <text x="200" y="200">Hello</text>
+    </update>
+
+results in the following document:
+
+    <rect x="10" y="10" width="100" y2="100"/>
+    <line x1="0" y1="0" x2="200" y2="200"/>
+    <text x="200" y="200">Hello</text>
+
+
+#### Primitives
+
+The supported drawing primitives are based on a subset from [SVG][].
+We list the elements and the attributes that are supported:
+
+- `line`: `stroke`, `stroke-width`, `opacity`, `x1`, `y1`, `x2`, `y2`, 
+- `path`: `stroke`, `stroke-width`, `opacity`, `d`
+- `rect`: `stroke`, `stroke-width`, `opacity`, `fill`, `fill-opacity`, `x`, `y`, `width`, `height`
+- `polygon`: `stroke`, `stroke-width`, `opacity`, `fill`, `fill-opacity`, `points`
+- `text`: `opacity`, `x`, `y`, `font-size`, `text`
+- `ellipse`: `stroke`, `stroke-width`, `opacity`, `fill`, `fill-opacity`, `cx`, `cy`, `rx`, `ry`
+
 
 #### Whiteboarding Operation Transformation Function
 
 In this section, we define the transformation function *xform* on all combinations of
-the whiteboard operations.
+the whiteboard operations. For each combination (*client_op*, *server_op*), we give the result
+of *xform(client_op, server_op)*.
 
-**TODO**
+##### insert(pos1, el1), insert(pos2, el2)
+
+    if pos1 <= pos2 :
+      return (insert(pos2 + 1, el2), insert(pos1, el1))
+    else :
+      return (insert(pos2, el2), insert(pos1 + 1, el1))
+
+##### insert(pos1, el1), remove(pos2)
+
+    if pos1 <= pos2 :
+      return (remove(pos2 + 1), insert(pos1, el1))
+    else if pos2 != -1 :
+      return (remove(pos2), insert(pos1 - 1, el1))
+    else :
+      return (remove(pos2), insert(pos1, el1))
+
+##### insert(pos1, el1), update(el2, pos2, newpos2)
+
+    if pos2 >= pos1 :
+      return (update(pos2 + 1, newpos2, el2), insert(pos1, el1))
+    else :
+      return (update(pos2, newpos2, el2), insert(pos1, el1))
+
+##### remove(pos1), insert(pos2, el2)
+
+      if op2 <= op1 :
+        return (insert(pos2, el2), remove(pos1 + 1))
+      else if op1 != -1 :
+        return (insert(pos2 - 1, el2), remove(pos1))
+      else :
+        return (insert(pos2, el2), remove(pos1))
+    
+
+##### remove(pos1), remove(pos2)
+
+    if pos1 == -1 or pos2 == -1 :
+      return (remove(pos2), remove(pos1))
+
+    if pos1 < pos2 :
+      return (remove(pos2 - 1), remove(pos1))
+    elif pos2 > pos1
+      return (remove(pos2), remove(pos1 - 1))
+    else :
+      return (remove(-1), remove(-1))
+    
+
+##### remove(pos1), update(el2, pos2, newpos2)
+
+    if pos1 == pos2 :
+      return (remove(-1), remove(pos1))
+    else if pos1 < pos2 and pos1 >= newpos2 :
+      return (update(el2, pos2 - 1, newpos2), remove(pos1))
+    else if pos1 > pos2 and pos1 <= newpos2 :
+      return (update(el2, pos2, newpos2 - 1), remove(pos1))
+    else if pos1 < pos2 :
+      return (update(el2, pos2 - 1, newpos2 - 1), remove(pos1))
+    else :
+      return (update(el2, pos2, newpos2), remove(pos1))
+
+##### update(el1, pos1, newpos1), insert(pos2, el2)
+
+    if pos2 <= pos1 :
+      return (insert(pos2, el2), update(pos1 + 1, newpos1, el1))
+    else :
+      return (insert(pos2, el2), update(pos1, newpos1, el1))
+  
+
+##### update(el1, pos1, newpos1), remove(pos2)
+
+    if pos1 == pos2 :
+      return (remove(pos2), remove(-1))
+    else if pos1 > pos2 and newpos1 <= pos2 :
+      return (remove(pos2), update(el1, pos1 - 1, newpos1))
+    else if pos1 < pos2 and newpos1 >= pos2 :
+      return (remove(pos2), update(el1, pos1, newpos1 - 1))
+    else if pos1 > pos2 :
+      return (remove(pos2), update(el1, pos1 - 1, newpos1 - 1))
+    else :
+      return (remove(pos2), update(el1, pos1, newpos1))
+    
+
+##### update(el1, pos1, newpos1), update(el2, pos2, newpos2)
+
+    if pos1 < pos2 and newpos1 > newpos2 :
+      op2' = update(el2, pos2 - 1, newpos2); 
+    else if pos1 < pos2 and newpos1 >= newpos2 :
+      op2' = update(el2, pos2 - 1, newpos2 - 1); 
+    else if pos1 >= pos2 and newpos1 >= newpos2 : 
+      op2' = update(el2, pos2, newpos2-1); 
+    else :
+      op2' = update(el2, pos2, newpos2);
+
+    if pos2 < pos1 and newpos2 > newpos1 :
+      op1' = update(el1, pos1 - 1, newpos1); 
+    else if pos2 < pos1 and newpos2 >= newpos1 :
+      op1' = update(el1, pos1 - 1, newpos1 - 1); 
+    else if pos2 >= pos1 and newpos2 >= newpos1 :
+      op1' = update(el1, pos1, newpos1 - 1); 
+    else :
+      op1' = update(el1, pos1, newpos1)
+
+    return (op2', op1')
+    
 
 ## Use Cases
 
 ### Session Initialization
     
 When an entity wants to start a whiteboarding session with another entity, it sends
-a request to the other party.
+a `session-request` query to the other party, with a whiteboarding `description`
+element.
 
 *Example: Initiator requests a new shared text editing session*
 
     <iq from="romeo@montague.net/garden"
         to="juliet@capulet.com/balcony"
         type="set" id="request-1">
-      <session-request xmlns="urn:xmpp:wb" sid="session1">
-        <wb xmlns="urn:xmpp:wb"/>
+      <session-request xmlns="urn:xmpp:shedit" sid="session1">
+        <description xmlns="urn:xmpp:wb">
+          <desc>Would you mind drawing with me?</desc>
+        </description>
       </session-request>
     </iq>
-
-**TODO: Add extra metadata to request**
 
 The other party immediately acknowledges receipt of the request.
 
@@ -648,15 +842,15 @@ The other party immediately acknowledges receipt of the request.
         type="result" id="request-1">
     </iq>
 
-When the other party agrees to do a whiteboard session, it sends a session
-acceptance element, and the initiator immediately acknowledges receipt.
+When the other party agrees to do a whiteboard session, it sends a 
+`session-accept` element, and the initiator immediately acknowledges receipt.
 
 *Example: Responder accepts request*
 
     <iq from="juliet@capulet.com/balcony"
         to="romeo@montague.net/garden"
         type="set" id="accept-1">
-      <session-accept xmlns="urn:xmpp:wb" sid="session1"/>
+      <session-accept xmlns="urn:xmpp:shedit" sid="session1"/>
     </iq>
 
 *Example: Initiator acknowledges receipt of the acceptance*
@@ -664,7 +858,7 @@ acceptance element, and the initiator immediately acknowledges receipt.
     <iq from="romeo@montague.net/garden"
         to="juliet@capulet.com/balcony"
         type="result" id="accept-1">
-      <session-request xmlns="urn:xmpp:wb" sid="session1">
+      <session-request xmlns="urn:xmpp:shedit" sid="session1">
         <wb xmlns="urn:xmpp:wb"/>
       </session-request>
     </iq>
@@ -673,18 +867,16 @@ After this exchange, the whiteboard session has started, and parties can start s
 each other operations.
 
 Alternatively, if the responding entity does not want to start a whiteboarding session, it 
-rejects the request.
+rejects the request with a `session-terminate` request.
 
 *Example: Responder rejects request*
 
     <iq to="juliet@capulet.com/balcony"
         from="romeo@montague.net/garden"
         type="set" id="accept-1">
-      <session-terminate xmlns="urn:xmpp:wb" sid="session1"/>
+      <session-terminate xmlns="urn:xmpp:shedit" sid="session1"/>
     </iq>
     
-
-**TODO: Add extra metadata in requests/rejects: reason, continuation, ...**
 
 ### Session Termination
 
@@ -696,7 +888,7 @@ terminate request.
     <iq to="juliet@capulet.com/balcony"
         from="romeo@montague.net/garden"
         type="set">
-      <session-terminate xmlns="urn:xmpp:wb" sid="session1"/>
+      <session-terminate xmlns="urn:xmpp:shedit" sid="session1"/>
     </iq>
   
 
@@ -704,7 +896,8 @@ terminate request.
 
 During a whiteboarding session, entities send each other operations that have been applied to
 their local whiteboard. These operations need to applied locally, possibly after first being
-transformed using the *operational transformation* algorithms described in ????.
+transformed using the *operational transformation* algorithms described in 
+[Control Algorithm](#control-algorithm).
 The initiator of the session follows the *client* algorithm for transforming operations,
 whereas the responder follows the *server* algorithm.
 
@@ -725,11 +918,11 @@ new state of the whiteboard.
     <iq from="juliet@capulet.com/balcony"
         to="romeo@montague.net/garden"
         type="set" id="operation-2">
-      <operation xmlns="urn:xmpp:wb" sid="session1" target-state="state-5"
+      <operation xmlns="urn:xmpp:shedit" sid="session1" target-state="state-5"
                  creator="juliet@capulet.com/balcony">
-        <add xmlns="urn:xmpp:wb">
-          <line x1="0" y1="0" x2="200" y2="200" id="line-1"/>
-        </add>
+        <insert xmlns="urn:xmpp:wb">
+          <line x1="0" y1="0" x2="200" y2="200"/>
+        </insert>
       </operation>
     </iq>
 
@@ -750,7 +943,7 @@ server (i.e. that have not yet been sent back as an `operation` from the server)
 needs to first transform the received operation such that
 it is applicable to the current state of the whiteboard. This is done using
 (possibly multiple applications of) the *xform* function, as described in the
-client algorithm from ???.
+client algorithm from [Control Algorithm](#control-algorithm).
 
 
 #### Client sends operations to Server
@@ -768,9 +961,9 @@ has been received from the server yet, the `source-state` attribute MUST be omit
     <iq from="romeo@montague.net/garden"
         to="juliet@capulet.com/balcony"
         type="set" id="operation-4">
-      <operation xmlns="urn:xmpp:wb" sid="session1" source-state="state-2">
+      <operation xmlns="urn:xmpp:shedit" sid="session1" source-state="state-2">
         <insert xmlns="urn:xmpp:wb">
-          <line x1="100" y1="100" x2="300" y2="300" id="line-25"/>
+          <line x1="100" y1="100" x2="300" y2="300"/>
         </insert>
       </operation>
     </iq>
@@ -789,7 +982,8 @@ operation applied on the server side before sending any other locally applied op
 
 When the server receives an operation, it applies it to its local whiteboard. If the
 `source-state` of the operation is not the most current state, the server first needs to 
-transform the operation using the OT algorithm described in ???, such that it is rooted 
+transform the operation using the OT algorithm described in [Control Algorithm](#control-algorithm), 
+such that it is rooted 
 in the most current state. After it has applied this operation, it sends a corresponding operation
 back, with the `target-state` attribute set to a new identifier for a state, and
 the `creator` set to the full JID of the originator of the operation. Since the `source-state`
@@ -801,11 +995,11 @@ omitted.
     <iq from="juliet@capulet.com/balcony"
         to="romeo@montague.net/garden"
         type="set" id="operation-23">
-      <operation xmlns="urn:xmpp:wb" sid="session1" target-state="state-5"
+      <operation xmlns="urn:xmpp:shedit" sid="session1" target-state="state-5"
                  creator="romeo@montague.net/garden">
-        <add xmlns="urn:xmpp:wb">
-          <line x1="200" y1="200" x2="300" y2="300" id="line-25"/>
-        </add>
+        <insert xmlns="urn:xmpp:wb">
+          <line x1="200" y1="200" x2="300" y2="300"/>
+        </insert>
       </operation>
     </iq>
 
@@ -814,31 +1008,6 @@ From the `creator` attribute, the client knows when its operation has been appli
 
 
 <!--
-    
-#### insert, insert
-
-This is quite simple transformation. For transformation(insert(pos1, a, 0, element1), insert(pos2, b, 0, element2)) output is: 
-insert(pos2+1, b, a, element2) and insert(pos1, a, b, element1) if pos1 <= pos2
-insert(pos2, b, a, element2) and insert(pos1+1, a, b, element1) if pos1 > pos2
-      
-
-#### update, update
-
-Two updates are more complex than two inserts, to simplify operations I don't merge two updates to the same element and apply only server side update in such situations(ignoring local one).  
-To describe update operation I will use such form "update(position, new position, id, parent id, element)"
-      
-For transformation(update(pos1, newpos1, a, 0, element1), update(pos2, newpos2, b, 0, element2)) output is: 
-
-    if "pos1 < pos2" and "newpos1 > newpos2" then first result is update(pos2-1, newpos2, b, a, element1); 
-    if "pos1 < pos2" and "newpos1 >= newpos2" then first result is update(pos2-1, newpos2-1, b, a, element1); 
-    if "pos1 >= pos2" and "newpos1 >= newpos2" then first result is update(pos2, newpos2-1, b, a, element1); 
-    if none of above first result is just update(pos2, newpos2, b, a, element1);
-
-
-    if "pos2 < pos1" and "newpos2 > newpos1" then second result is update(pos1-1, newpos1, b, a, element1); 
-    if "pos2 < pos1" and "newpos2 >= newpos1" then second result is update(pos1-1, newpos1-1, b, a, element1); 
-    if "pos2 >= pos1" and "newpos2 >= newpos1" then second result is update(pos1, newpos1-1, b, a, element1); 
-    if none of above second result is just update(pos1, newpos1, a, b, element2); 
     
 ## Glossary
   
@@ -888,10 +1057,75 @@ This document requires no interaction with [IANA][]
 
 ## XMPP Registrar Considerations
 
-The [XMPP Registrar][] includes `urn:xmpp:wb' in its registry of protocol namespaces (see 
-<http://xmpp.org/registrar/namespaces.html>).
+The [XMPP Registrar][] includes `urn:xmpp:shedit` and `urn:xmpp:wb` in its registry of 
+protocol namespaces (see <http://xmpp.org/registrar/namespaces.html>).
 
-## XML Schema
+## XML Schemas
+
+### urn:xmpp:shedit
+
+    <?xml version='1.0' encoding='UTF-8'?>
+
+    <xs:schema
+        xmlns:xs='http://www.w3.org/2001/XMLSchema'
+        targetNamespace='urn:xmpp:shedit'
+        xmlns='urn:xmpp:shedit'
+        elementFormDefault='qualified'>
+
+      <xs:annotation>
+        <xs:documentation>
+          The protocol documented by this schema is defined in
+          XEP-???: http://www.xmpp.org/extensions/xep-???.html
+        </xs:documentation>
+      </xs:annotation>
+
+      <xs:element name='session-request'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:any namespace='##other'/>
+          </xs:choice>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='session-accept'>
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base='empty'>
+              <xs:attribute name='sid' type='xs:string' use='required'/>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='session-terminate'>
+        <xs:complexType>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:element name='operation'>
+        <xs:complexType>
+          <xs:choice>
+            <xs:any namespace='##other'/>
+          </xs:choice>
+          <xs:attribute name='sid' type='xs:string' use='required'/>
+          <xs:attribute name='source-state' type='xs:string' use='optional'/>
+          <xs:attribute name='target-state' type='xs:string' use='optional'/>
+          <xs:attribute name='creator' type='xs:string' use='optional'/>
+        </xs:complexType>
+      </xs:element>
+
+      <xs:simpleType name='empty'>
+        <xs:restriction base='xs:string'>
+          <xs:enumeration value=''/>
+        </xs:restriction>
+      </xs:simpleType>
+
+    </xs:schema>
+
+
+### urn:xmpp:wb
 
     <?xml version='1.0' encoding='UTF-8'?>
 
@@ -908,43 +1142,12 @@ The [XMPP Registrar][] includes `urn:xmpp:wb' in its registry of protocol namesp
         </xs:documentation>
       </xs:annotation>
 
-      <xs:element name='session-request'>
+      <xs:element name='description'>
         <xs:complexType>
-          <xs:choice>
-            <xs:element ref='wb'/>
-          </xs:choice>
-          <xs:attribute name='sid' type='xs:string' use='required'/>
+          <xs:sequence>
+            <xs:element name='desc' type='xs:string'/>
+          </xs:sequence>
         </xs:complexType>
-      </xs:element>
-
-      <xs:element name='session-accept'>
-        <xs:complexType>
-          <xs:attribute name='sid' type='xs:string' use='required'/>
-        </xs:complexType>
-      </xs:element>
-
-      <xs:element name='session-terminate'>
-        <xs:complexType>
-          <xs:attribute name='sid' type='xs:string' use='required'/>
-        </xs:complexType>
-      </xs:element>
-
-      <xs:element name='operation'>
-        <xs:complexType>
-          <xs:choice>
-            <xs:element ref='add'/>
-            <xs:element ref='remove'/>
-            <xs:element ref='update'/>
-          </xs:choice>
-          <xs:attribute name='sid' type='xs:string' use='required'/>
-          <xs:attribute name='source-state' type='xs:string' use='optional'/>
-          <xs:attribute name='target-state' type='xs:string' use='optional'/>
-          <xs:attribute name='creator' type='xs:string' use='optional'/>
-        </xs:complexType>
-      </xs:element>
-
-      <xs:element name='wb'>
-        TODO
       </xs:element>
 
       <xs:element name='add'>
@@ -996,6 +1199,8 @@ The [XMPP Registrar][] includes `urn:xmpp:wb' in its registry of protocol namesp
           </xs:simpleContent>
         </xs:complexType>
       </xs:element>
+      
+      TODO: Primitives
 
       <xs:simpleType name='empty'>
         <xs:restriction base='xs:string'>
@@ -1012,5 +1217,6 @@ The introductory example from this specification is based on
 
 
 [ot-intro]: http://www.codecommit.com/blog/java/understanding-and-applying-operational-transformation]
+[SVG]: http://www.w3.org/TR/SVGMobile12/ "Scalable Vector Graphics (SVG) Tiny 1.2 Specification"
 [IANA]: ...
 [XMPP Registrar]: ...
