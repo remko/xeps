@@ -1,6 +1,6 @@
 require 'rake/clean'
 
-XEPS = %w(whiteboarding)
+XEPS = %w(whiteboarding xep-0146)
 
 task :default => :all
 

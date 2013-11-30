@@ -32,6 +32,8 @@ module Kramdown
 				super
 				@current_level = 0
 				@in_example = nil
+				@in_code = nil
+				@in_html = false
 				@metadata = $metadata
 			end
 
@@ -100,7 +102,8 @@ module Kramdown
 					end
 				end
 
-				result << "<type>Standards Track</type>\n"
+				type = $metadata['type'] || "Standards Track"
+				result << "<type>#{type}</type>\n"
 				result << "<sig>Standards</sig>\n"
 				result << "<approver>Council</approver>\n"
 				result << "<supersedes/>\n"
@@ -157,6 +160,10 @@ module Kramdown
 				"<ul>#{convert_children(el)}</ul>"
 			end
 
+			def convert_ol(el)
+				"<ol>#{convert_children(el)}</ol>"
+			end
+
 			def convert_li(el)
 				"<li>#{convert_children(el)}</li>"
 			end
@@ -172,13 +179,17 @@ module Kramdown
 					result = "<example caption='#{@in_example}'><![CDATA[#{value}]]></example>"
 					@in_example = nil
 					result
+				elsif @in_code
+					result = "<code caption='#{@in_code}'><![CDATA[#{value}]]></code>"
+					@in_code = nil
+					result
 				else
 					"<code><![CDATA[#{value}]]></code>"
 				end
 			end
 			
 			def convert_text(el)
-				CGI.escape_html(el.value)
+				@in_html ? el.value : CGI.escape_html(el.value)
 			end
 
 			def convert_em(el)
@@ -186,13 +197,21 @@ module Kramdown
 				if m = /^Example: (.*)/.match(value) 
 					@in_example = m[1]
 					return ""
+				elsif m = /^Code: (.*)/.match(value) 
+					@in_code = m[1]
+					return ""
 				else
 					"<em>#{value}</em>"
 				end
 			end
 
 			def convert_strong(el)
-				"<strong>#{convert_children(el)}</strong>"
+				value = convert_children(el)
+				if m = /^XEP-(\d\d\d\d)$/.match(value)
+					"&xep#{m[1]};"
+				else 
+					"<strong>#{value}</strong>"
+				end
 			end
 
 			def convert_img(el)
@@ -225,6 +244,10 @@ module Kramdown
 					"&IANA;"
 				elsif text == "XMPP Registrar"
 					"&REGISTRAR;"
+				elsif text == "XMPP Registrar Namespaces"
+					"&NAMESPACES;"
+				elsif text == "XMPP Registrar Formtypes"
+					"&FORMTYPES;"
 				elsif el.attr['href'].start_with? '#'
 					"<link url='#{el.attr['href']}'>#{text}</link>"
 				else
@@ -234,8 +257,11 @@ module Kramdown
 			end
 
 			def convert_html_element(el)
-				if el.options[:category] == :span
-					"<#{el.value}>#{convert_children(el)}</#{el.value}>"
+				if el.options[:category] == :span or %w(table tr th td).include? el.value
+					@in_html = true
+					result = "<#{el.value}>#{convert_children(el)}</#{el.value}>"
+					@in_html = false
+					result
 				else
 					raise "Unknown element: #{el.inspect}"
 				end
