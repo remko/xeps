@@ -569,7 +569,7 @@ The client control algorithm:
     on_server_operation_received(op) :
       current_server_state = op.target_state
       if op.creator == self :
-        new_bridge.pop_front()
+        bridge.pop_front()
         send_next_operation()
       else :
         new_bridge = []
