@@ -9,7 +9,7 @@ I work on.
 
 To build everything, run
 
-    rake
+    make
 
 The XML output will be in `xml/`, the HTML output in `html/extensions`.
 

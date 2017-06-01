@@ -22,6 +22,67 @@ XEP_HEADER = <<EOF
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 EOF
 
+class MyFormatter < REXML::Formatters::Pretty
+	def initialize(indentation=2)
+		super(2)
+		@compact = true
+	end
+	def write_element(node, output)
+		output << ' '*@level
+		output << "<#{node.expanded_name}"
+
+		node.attributes.each_attribute do |attr|
+			output << " "
+			attr.write( output )
+		end unless node.attributes.empty?
+
+		if node.children.empty?
+			if @ie_hack
+				output << " "
+			end
+			output << "/"
+		else
+			output << ">"
+			skip = false
+			if compact
+				if node.children.inject(true) {|s,c| s & c.kind_of?(::REXML::Text)}
+					string = ""
+					old_level = @level
+					@level = 0
+					node.children.each { |child| write( child, string ) }
+					@level = old_level
+					if string.length < @width
+						output << string
+						skip = true
+					end
+				end
+			end
+			if node.name == "code"
+				string = ""
+				old_level = @level
+				@level = 0
+				node.children.each { |child| write( child, string ) }
+				@level = old_level
+				output << string
+				skip = true
+			end
+			unless skip
+				output << "\n"
+				@level += @indentation
+				node.children.each { |child|
+					next if child.kind_of?(::REXML::Text) and child.to_s.strip.length == 0
+					write( child, output )
+					output << "\n"
+				}
+				@level -= @indentation
+				output << ' '*@level
+			end
+			output << "</#{node.expanded_name}"
+		end
+		output << ">"
+	end
+end
+
 module Kramdown
 	module Converter
 		class Xep < Base
@@ -112,7 +173,13 @@ module Kramdown
 				$metadata['revisions'].each do |revision|
 					result << "<revision>"
 					revision.each do |key, value|
-						value = "<p>" + value + "</p>" if key == "remark"
+						if key == "remark"
+							if value.kind_of?(Array)
+								value = "<ul>" + value.map { |v| "<li>#{v}</li>" }.join("") + "</ul>"
+							else
+								value = "<p>" + value + "</p>"
+							end
+						end
 						result << "<#{key}>#{value}</#{key}>\n"
 					end
 					result << "</revision>"
@@ -297,8 +364,12 @@ $metadata = YAML.load(data[1])
 content = data[2]
 
 raw_xep = Kramdown::Document.new(content).to_xep
-File.open(ARGV[1], 'w') { |f| f.write(raw_xep) }
 
-# out = ""
-# REXML::Formatters::Transitive.new().write(REXML::Document.new(raw_xep), out)
-# puts out
+File.open(ARGV[1], 'w') do |f|
+	formatter = MyFormatter.new
+	formatter.write(REXML::Document.new(raw_xep), f)
+	
+	# REXML::Formatters::Transitive.new().write(REXML::Document.new(raw_xep), f)
+	
+	# f.write(raw_xep)
+end
